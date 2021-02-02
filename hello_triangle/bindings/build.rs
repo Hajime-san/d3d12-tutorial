@@ -15,6 +15,8 @@ fn main() {
             LRESULT,
             SW_NORMAL,
             HINSTANCE,
+            DXGI_CREATE_FACTORY_DEBUG,
+            S_FALSE,
         },
         windows::win32::windows_and_messaging::{
             WNDCLASSW,
@@ -42,6 +44,19 @@ fn main() {
         },
         windows::win32::windows_programming::{
             CloseHandle,
+        },
+        windows::win32::com::{
+            HRESULT,
+        },
+        windows::win32::dxgi::{
+            CreateDXGIFactory1,
+            CreateDXGIFactory2,
+            IDXGIFactory6,
+            IDXGIFactory1,
+        },
+        windows::win32::direct3d12::{
+            ID3D12Device,
+            D3D12CreateDevice,
         },
     );
 }

@@ -53,15 +53,15 @@ pub fn create_window(class_name: &[u16], width: i32, height: i32) -> HWND {
 
     let instance = unsafe { HINSTANCE(GetModuleHandleW(std::ptr::null())) };
 
-    let mut winc = WNDCLASSW::default();
-    winc.style = (CS_HREDRAW | CS_VREDRAW) as u32;
-    winc.lpfn_wnd_proc = Some(window_procedure);
-    winc.h_icon = unsafe { LoadIconW(instance, IDI_APPLICATION as *const u16) };
-    winc.h_cursor = unsafe { LoadCursorW(instance, IDC_ARROW as *const u16) };
-    // winc.hbr_background = unsafe { GetStockObject(WHITE_BRUSH as i32) as HBRUSH };
-    winc.lpsz_class_name = class_name.as_ptr() as *mut u16;
+    let mut window_class = WNDCLASSW::default();
+    window_class.style = (CS_HREDRAW | CS_VREDRAW) as u32;
+    window_class.lpfn_wnd_proc = Some(window_procedure);
+    window_class.h_icon = unsafe { LoadIconW(instance, IDI_APPLICATION as *const u16) };
+    window_class.h_cursor = unsafe { LoadCursorW(instance, IDC_ARROW as *const u16) };
+    // window_class.hbr_background = unsafe { GetStockObject(WHITE_BRUSH as i32) as HBRUSH };
+    window_class.lpsz_class_name = class_name.as_ptr() as *mut u16;
 
-    let atom = unsafe { RegisterClassW(&winc) };
+    let atom = unsafe { RegisterClassW(&window_class) };
     debug_assert!(atom != 0);
 
     unsafe {
@@ -90,7 +90,7 @@ pub extern "system" fn window_procedure(hwnd: HWND, msg: u32, w_param: WPARAM, l
                         PostQuitMessage(0);
                         LRESULT(0)
                     },
-        _ => return unsafe {
+        _ => unsafe {
                         DefWindowProcW(hwnd, msg, w_param, l_param)
                     },
     }
