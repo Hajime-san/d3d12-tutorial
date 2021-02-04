@@ -1,0 +1,3 @@
+## Run application
+
+```cargo run```
