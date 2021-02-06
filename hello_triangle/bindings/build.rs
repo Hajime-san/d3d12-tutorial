@@ -32,16 +32,8 @@ fn main() {
             GetMessageW,
             DispatchMessageW,
         },
-        windows::win32::gdi::{
-            HBRUSH,
-            GetStockObject,
-            UpdateWindow,
-        },
-        windows::win32::menus_and_resources::{
-            LoadIconW,
-            LoadCursorW,
-            HMENU,
-        },
+        windows::win32::gdi::*,
+        windows::win32::menus_and_resources::*,
         windows::win32::windows_programming::{
             CloseHandle,
         },
@@ -52,7 +44,17 @@ fn main() {
             CreateDXGIFactory1,
             CreateDXGIFactory2,
             IDXGIFactory6,
-            IDXGIFactory1,
+            IDXGIOutput,
+            IDXGISwapChain1,
+            DXGI_SWAP_CHAIN_DESC1,
+            DXGI_SWAP_CHAIN_FULLSCREEN_DESC,
+            DXGI_FORMAT,
+            DXGI_SAMPLE_DESC,
+            DXGI_USAGE_BACK_BUFFER,
+            DXGI_SCALING,
+            DXGI_SWAP_EFFECT,
+            DXGI_ALPHA_MODE,
+            DXGI_SWAP_CHAIN_FLAG,
         },
         windows::win32::direct3d12::{
             ID3D12Device,
@@ -62,7 +64,10 @@ fn main() {
             ID3D12CommandAllocator,
             ID3D12GraphicsCommandList,
             ID3D12PipelineState,
+            ID3D12CommandQueue,
             D3D12_COMMAND_LIST_TYPE,
+            D3D12_COMMAND_QUEUE_DESC,
+            D3D12_COMMAND_QUEUE_PRIORITY,
         },
     );
 }
