@@ -57,6 +57,12 @@ fn main() {
         windows::win32::direct3d12::{
             ID3D12Device,
             D3D12CreateDevice,
+            ID3D12Debug,
+            D3D12GetDebugInterface,
+            ID3D12CommandAllocator,
+            ID3D12GraphicsCommandList,
+            ID3D12PipelineState,
+            D3D12_COMMAND_LIST_TYPE,
         },
     );
 }

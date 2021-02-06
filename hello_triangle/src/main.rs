@@ -11,6 +11,9 @@ use bindings::{
         IDXGIFactory6,
         IDXGIFactory1,
     },
+    windows::win32::direct3d12::{
+        D3D12_COMMAND_LIST_TYPE,
+    },
     windows::BOOL,
 };
 
@@ -31,15 +34,19 @@ fn main() {
 
     let hwnd = win::create_window(&class_name, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-    let mut dxgi_factory = ptr::null_mut();
+    let dxgi_factory = d3d::create_dxgi_factory2::<IDXGIFactory6>(DXGI_CREATE_FACTORY_DEBUG).unwrap();
 
-    if DEBUG {
-        dxgi_factory = d3d::create_dxgi_factory2::<IDXGIFactory6>(DXGI_CREATE_FACTORY_DEBUG).unwrap();
-    } else {
-        //dxgi_factory = lib::create_dxgi_factory1::<IDXGIFactory1>().unwrap();
-    }
+    // dxgi_factory = d3d::create_dxgi_factory1::<IDXGIFactory1>().unwrap();
 
+    /// enable debug layer
+    d3d::enable_debug_layer(DEBUG);
+
+    /// create device
     let d3d12_device = d3d::create_d3d12_device().unwrap();
+
+    /// create command list, allocator
+    // let command_allocator = d3d::create_command_allocator(d3d12_device, D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT).unwrap();
+    // let command_list = d3d::create_command_list(d3d12_device, 0, D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT, command_allocator, ptr::null_mut()).unwrap();
 
     win::show_window(hwnd);
 
