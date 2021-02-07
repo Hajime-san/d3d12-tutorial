@@ -1,14 +1,56 @@
 use bindings::{
     windows::win32::dxgi as dxgi,
     windows::win32::direct3d12 as direct3d12,
+    windows::win32::direct3d11 as direct3d11,
+    windows::win32::direct3d_hlsl as direct3d_hlsl,
     windows::win32::windows_and_messaging as windows_and_messaging,
     windows::Interface,
     windows::IUnknown,
     windows::ErrorCode,
-    windows::win32::direct3d11::D3D_FEATURE_LEVEL,
+    windows::Error,
     windows::Abi,
     windows::Result as WinResult,
 };
+
+use std::{
+    ptr,
+    mem,
+    ffi,
+    string,
+};
+
+use crate::util;
+
+#[derive(Debug, Clone)]
+pub struct CommittedResource {
+    pub p_heap_properties: *const direct3d12::D3D12_HEAP_PROPERTIES,
+    pub heap_flags: direct3d12::D3D12_HEAP_FLAGS,
+    pub p_resource_desc: *const direct3d12::D3D12_RESOURCE_DESC,
+    pub initial_resource_state: direct3d12::D3D12_RESOURCE_STATES,
+    pub p_optimized_clear_value: *const direct3d12::D3D12_CLEAR_VALUE
+}
+
+#[derive(Debug, Clone)]
+pub struct BufferResources<T> {
+    pub buffer_view: T,
+    pub buffer_object: WinResult<direct3d12::ID3D12Resource>,
+}
+#[derive(Debug, Clone, Copy)]
+pub struct XMFLOAT3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32
+}
+#[derive(Debug, Clone, Copy)]
+pub struct XMFLOAT2 {
+    pub x: f32,
+    pub y: f32,
+}
+#[derive(Debug, Clone, Copy)]
+pub struct Vertex {
+    pub position: XMFLOAT3,
+    // pub uv: XMFLOAT2,
+}
 
 pub fn create_dxgi_factory1<T:Interface>() -> WinResult<T> {
     unsafe {
@@ -33,12 +75,12 @@ pub fn create_dxgi_factory2<T:Interface>(flags: u32) -> WinResult<T> {
     }
 }
 
-pub fn create_d3d12_device() -> WinResult<direct3d12::ID3D12Device> {
-    let levels: [D3D_FEATURE_LEVEL; 4] = [
-        D3D_FEATURE_LEVEL::D3D_FEATURE_LEVEL_12_1,
-        D3D_FEATURE_LEVEL::D3D_FEATURE_LEVEL_12_0,
-        D3D_FEATURE_LEVEL::D3D_FEATURE_LEVEL_11_1,
-        D3D_FEATURE_LEVEL::D3D_FEATURE_LEVEL_11_0
+pub fn create_d3d12_device(p_adapter: Option<IUnknown>) -> WinResult<direct3d12::ID3D12Device> {
+    let levels: [direct3d11::D3D_FEATURE_LEVEL; 4] = [
+        direct3d11::D3D_FEATURE_LEVEL::D3D_FEATURE_LEVEL_12_1,
+        direct3d11::D3D_FEATURE_LEVEL::D3D_FEATURE_LEVEL_12_0,
+        direct3d11::D3D_FEATURE_LEVEL::D3D_FEATURE_LEVEL_11_1,
+        direct3d11::D3D_FEATURE_LEVEL::D3D_FEATURE_LEVEL_11_0
     ];
 
     let mut result: ErrorCode = ErrorCode::E_POINTER;
@@ -47,7 +89,7 @@ pub fn create_d3d12_device() -> WinResult<direct3d12::ID3D12Device> {
     for lv in levels.iter() {
         unsafe {
             result = direct3d12::D3D12CreateDevice(
-                None,
+                p_adapter.clone(),
                 *lv,
                 &direct3d12::ID3D12Device::IID,
                 d3d_device.set_abi()
@@ -147,5 +189,192 @@ pub fn create_swap_chain_for_hwnd(
                 &mut swap_chain
             )
             .and_some(swap_chain)
+    }
+}
+
+pub fn create_descriptor_heap(device: &direct3d12::ID3D12Device, p_descriptor_heap_desc: *const direct3d12::D3D12_DESCRIPTOR_HEAP_DESC) -> WinResult<direct3d12::ID3D12DescriptorHeap> {
+    unsafe {
+        let mut descriptor_heap: Option<direct3d12::ID3D12DescriptorHeap> = None;
+        device.
+        CreateDescriptorHeap(
+            p_descriptor_heap_desc,
+            &direct3d12::ID3D12DescriptorHeap::IID,
+            descriptor_heap.set_abi()
+        )
+        .and_some(descriptor_heap)
+    }
+}
+
+pub fn create_back_buffer(
+    device: &direct3d12::ID3D12Device,
+    swapchain: &mut dxgi::IDXGISwapChain1,
+    swapchain_desc: dxgi::DXGI_SWAP_CHAIN_DESC1,
+    descriotor_heap: &direct3d12::ID3D12DescriptorHeap,
+    p_desc: Option<*const direct3d12::D3D12_RENDER_TARGET_VIEW_DESC>)
+    -> Vec<Option<direct3d12::ID3D12Resource>> {
+    // bind render target view heap to swap chain buffer
+    let mut back_buffers: Vec<Option<direct3d12::ID3D12Resource>> = vec![None; swapchain_desc.buffer_count as usize];
+
+    let mut handle = direct3d12::D3D12_CPU_DESCRIPTOR_HANDLE::default();
+
+    unsafe { descriotor_heap.GetCPUDescriptorHandleForHeapStart(&mut handle) };
+
+    for i in 0..swapchain_desc.buffer_count {
+        unsafe {
+            swapchain.GetBuffer(
+                i as u32,
+                &direct3d12::ID3D12Resource::IID,
+                back_buffers[i as usize].set_abi()
+            ).and_some(back_buffers[i as usize].clone());
+        }
+
+        unsafe {
+            device.CreateRenderTargetView(
+                &back_buffers[i as usize],
+                p_desc.unwrap_or(ptr::null()),
+                handle.clone()
+            );
+        };
+
+        handle.clone().ptr += unsafe {
+            device.GetDescriptorHandleIncrementSize(direct3d12::D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV) as usize
+        }
+    }
+
+    back_buffers
+}
+
+fn create_buffer_map<T>(device: &direct3d12::ID3D12Device, comitted_resource: &CommittedResource, resource: &Vec<T>) -> WinResult<direct3d12::ID3D12Resource> {
+
+    let buffer = unsafe {
+        let mut tmp: Option<direct3d12::ID3D12Resource> = None;
+        device.
+            CreateCommittedResource(
+                comitted_resource.p_heap_properties,
+                comitted_resource.heap_flags,
+                comitted_resource.p_resource_desc,
+                comitted_resource.initial_resource_state,
+                comitted_resource.p_optimized_clear_value,
+                &direct3d12::ID3D12Resource::IID,
+                tmp.set_abi()
+            )
+            .and_some(tmp)
+    };
+
+    // buffer map
+    let mut buffer_map = std::ptr::null_mut::<Vec<T>>();
+
+    // map buffer to GPU
+    unsafe {
+        buffer.clone().unwrap().
+        Map(0, std::ptr::null_mut(), util::get_pointer_of_interface(&mut buffer_map));
+    };
+    unsafe {
+        buffer_map.copy_from_nonoverlapping(resource.as_ptr().cast::<Vec<T>>(), std::mem::size_of_val(&resource) )
+    };
+    unsafe {
+        buffer.clone().unwrap().
+        Unmap(0, std::ptr::null_mut());
+    };
+
+    buffer
+}
+
+pub fn create_vertex_buffer_resources(
+    device: &direct3d12::ID3D12Device,
+    comitted_resource: &CommittedResource,
+    resource: &Vec<Vertex>)
+    -> BufferResources<direct3d12::D3D12_VERTEX_BUFFER_VIEW> {
+    let buffer = create_buffer_map(device, comitted_resource, resource);
+
+    let buffer_view = direct3d12::D3D12_VERTEX_BUFFER_VIEW {
+        buffer_location : unsafe { buffer.clone().unwrap().GetGPUVirtualAddress() },
+        size_in_bytes : (resource.len() * mem::size_of::<Vertex>()) as u32,
+        stride_in_bytes : std::mem::size_of_val(&resource[0]) as u32,
+    };
+
+    BufferResources {
+        buffer_view: buffer_view,
+        buffer_object: buffer.clone()
+    }
+}
+
+pub fn create_index_buffer_resources(
+    device: &direct3d12::ID3D12Device,
+    comitted_resource: &CommittedResource,
+    resource: &Vec<u16>)
+    -> BufferResources<direct3d12::D3D12_INDEX_BUFFER_VIEW> {
+    // reuse vertex buffer desc
+    let p_resource_desc = comitted_resource.p_resource_desc as *mut direct3d12::D3D12_RESOURCE_DESC;
+    unsafe {
+        (*p_resource_desc).width = (std::mem::size_of_val(&resource) * &resource.len()) as u64
+    };
+    let buffer = create_buffer_map(device, comitted_resource, resource);
+
+    let buffer_view = direct3d12::D3D12_INDEX_BUFFER_VIEW {
+        buffer_location : unsafe { buffer.clone().unwrap().GetGPUVirtualAddress() },
+        format : dxgi::DXGI_FORMAT::DXGI_FORMAT_R16_UINT,
+        size_in_bytes : (resource.len() * mem::size_of::<u16>()) as u32,
+    };
+
+    BufferResources {
+        buffer_view: buffer_view,
+        buffer_object: buffer.clone()
+    }
+}
+
+pub fn create_shader_resource(path: &str, p_entrypoint: &str, p_target: &str) -> WinResult<direct3d11::ID3DBlob> {
+    // let include_obj = unsafe {
+    //     let include_ptr = ptr::null_mut::<direct3d11::ID3DInclude>();
+    //     include_ptr.as_ref().unwrap()
+    //         .Open(
+    //             direct3d11::D3D_INCLUDE_TYPE::D3D_INCLUDE_LOCAL,
+    //             ffi::CString::new(include).unwrap().as_ptr(),
+    //             None,
+    //             None,
+    //             0,
+    //         )
+    // };
+
+    let mut error_blob: Option<direct3d11::ID3DBlob> = None;
+
+    let shader_blob = unsafe {
+        let mut tmp: Option<direct3d11::ID3DBlob> = None;
+        direct3d_hlsl::D3DCompileFromFile(
+            util::path_to_wide_str(path).as_ptr() as *const u16,
+            std::ptr::null_mut(),
+            None,
+            ffi::CString::new(p_entrypoint).unwrap().as_ptr(),
+            ffi::CString::new(p_target).unwrap().as_ptr(),
+            direct3d_hlsl::D3DCOMPILE_DEBUG | direct3d_hlsl::D3DCOMPILE_DEBUG,
+            0,
+            &mut tmp,
+            &mut error_blob
+        )
+        .and_some(tmp)
+    };
+
+    // notify compilation result
+    match &error_blob {
+        None => shader_blob,
+        Some(error_blob) => {
+            // output compilation error message
+            let error_str = unsafe {
+                string::String::from_raw_parts(
+                error_blob.clone().GetBufferPointer().cast::<u8>(),
+                error_blob.clone().GetBufferSize(),
+                error_blob.clone().GetBufferSize())
+            };
+            println!("shader compilation error occured : {}", error_str);
+
+            let result: Result<direct3d11::ID3DBlob, Error> = Err(
+                Error::new(
+                    ErrorCode::E_POINTER,
+                    "shader compilation error"
+                )
+            );
+
+            result
+        }
     }
 }
