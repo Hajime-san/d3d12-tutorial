@@ -6,7 +6,11 @@ use bindings::{
     windows::BOOL,
 };
 
-use std::{ptr};
+use std::{
+    ffi,
+    ptr,
+    mem,
+};
 // use std::mem;
 
 pub mod util;
@@ -16,8 +20,6 @@ pub mod d3d;
 const DEBUG: bool = true;
 const WINDOW_WIDTH: i32 = 1280;
 const WINDOW_HEIGHT: i32 = 720;
-
-type INDICES = [u32; 6];
 
 fn main() {
 
@@ -146,19 +148,91 @@ fn main() {
     let pixel_shader_blob = d3d::create_shader_resource("shaders\\PixelShader.hlsl", "BasicPS", "ps_5_0").unwrap();
 
     // vertex layout
-    // let input_element: [D3D12_INPUT_ELEMENT_DESC; 1] = [
-    //     D3D12_INPUT_ELEMENT_DESC {
-    //         SemanticName: CString::new("POSITION").unwrap().into_raw(),
-    //         SemanticIndex: 0,
-    //         Format: DXGI_FORMAT_R32G32B32_FLOAT,
-    //         InputSlot: 0,
-    //         AlignedByteOffset: D3D12_APPEND_ALIGNED_ELEMENT,
-    //         InputSlotClass: D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-    //         InstanceDataStepRate: 0,
-    //     },
-    // ];
+    let mut input_element: [direct3d12::D3D12_INPUT_ELEMENT_DESC; 1] = [
+        direct3d12::D3D12_INPUT_ELEMENT_DESC {
+            semantic_name: ffi::CString::new("POSITION").unwrap().into_raw() as *mut i8,
+            semantic_index: 0,
+            format: dxgi::DXGI_FORMAT::DXGI_FORMAT_R32G32B32_FLOAT,
+            input_slot: 0,
+            aligned_byte_offset: direct3d12::D3D12_APPEND_ALIGNED_ELEMENT,
+            input_slot_class: direct3d12::D3D12_INPUT_CLASSIFICATION::D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+            instance_data_step_rate: 0,
+        },
+    ];
 
-    // let command_list = d3d::create_command_list(d3d12_device, 0, D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT, command_allocator, ptr::null_mut()).unwrap();
+    // create root signature
+    let root_signature = d3d::create_root_signature(&d3d12_device).unwrap();
+
+    // create graphics pipeline
+    let mut gr_pipeline = direct3d12::D3D12_GRAPHICS_PIPELINE_STATE_DESC::default();
+    // let mut gr_pipeline: direct3d12::D3D12_GRAPHICS_PIPELINE_STATE_DESC = unsafe { mem::zeroed() };
+
+    // set shader
+    gr_pipeline.p_root_signature = Some(root_signature);
+    gr_pipeline.vs.p_shader_bytecode = unsafe { vertex_shader_blob.GetBufferPointer() };
+    gr_pipeline.vs.bytecode_length = unsafe { vertex_shader_blob.GetBufferSize() };
+    gr_pipeline.ps.p_shader_bytecode = unsafe { pixel_shader_blob.GetBufferPointer() };
+    gr_pipeline.ps.bytecode_length = unsafe { pixel_shader_blob.GetBufferSize() };
+
+    // sample mask
+    gr_pipeline.sample_mask = direct3d12::D3D12_DEFAULT_SAMPLE_MASK;
+
+    // culling, filling
+    gr_pipeline.rasterizer_state.cull_mode = direct3d12::D3D12_CULL_MODE::D3D12_CULL_MODE_NONE;
+    gr_pipeline.rasterizer_state.fill_mode = direct3d12::D3D12_FILL_MODE::D3D12_FILL_MODE_SOLID;
+    gr_pipeline.rasterizer_state.depth_clip_enable = BOOL(1);
+
+    // blend mode
+    gr_pipeline.blend_state.alpha_to_coverage_enable = BOOL(0);
+    gr_pipeline.blend_state.independent_blend_enable = BOOL(0);
+
+    // render target blend settings
+    let mut render_target_blend_desc = direct3d12::D3D12_RENDER_TARGET_BLEND_DESC::default();
+    render_target_blend_desc.blend_enable = BOOL(0);
+    render_target_blend_desc.logic_op_enable = BOOL(0);
+    //render_target_blend_desc.render_target_write_mask = direct3d12::D3D12_COLOR_WRITE_ENABLE::D3D12_COLOR_WRITE_ENABLE_ALL;
+    render_target_blend_desc.render_target_write_mask = 4;
+
+    // gr_pipeline.blend_state.render_target[0] = render_target_blend_desc;
+
+    // bind input layout
+    gr_pipeline.input_layout.p_input_element_descs = &mut input_element[0];
+    gr_pipeline.input_layout.num_elements = input_element.len() as u32;
+
+    // way to express triangle
+    gr_pipeline.ib_strip_cut_value = direct3d12::D3D12_INDEX_BUFFER_STRIP_CUT_VALUE::D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+
+    // primitive topology setting
+    gr_pipeline.primitive_topology_type = direct3d12::D3D12_PRIMITIVE_TOPOLOGY_TYPE::D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+    // render target settings
+    gr_pipeline.num_render_targets = 1;
+    // gr_pipeline.rtv_formats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    // anti aliasing
+    gr_pipeline.rasterizer_state.multisample_enable = BOOL(0);
+    gr_pipeline.sample_desc.count = 1;
+    gr_pipeline.sample_desc.quality = 0;
+
+    // create grahphics pipeline state object
+    let pipeline_state = d3d::create_pipeline_state(&d3d12_device, &gr_pipeline).unwrap();
+
+    // viewport setting
+    let viewport = d3d::set_viewport(WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    // scissor rectangle setting
+    // let scissor_rect = d3d::set_scissor_rect(WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    let command_list = d3d::create_command_list(
+            &d3d12_device,
+            0,
+            direct3d12::D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT,
+            &command_allocator,
+            &pipeline_state
+        ).unwrap();
+
+    let mut current_frame = 0;
+    let clear_color: [f32; 4] = [ 1.0, 1.0, 0.0, 1.0 ];
 
     win::show_window(h_wnd);
 

@@ -7,7 +7,7 @@ use bindings::{
     windows::Interface,
     windows::IUnknown,
     windows::ErrorCode,
-    windows::Error,
+    windows::Error as WinError,
     windows::Abi,
     windows::Result as WinResult,
 };
@@ -215,9 +215,11 @@ pub fn create_back_buffer(
     // bind render target view heap to swap chain buffer
     let mut back_buffers: Vec<Option<direct3d12::ID3D12Resource>> = vec![None; swapchain_desc.buffer_count as usize];
 
-    let mut handle = direct3d12::D3D12_CPU_DESCRIPTOR_HANDLE::default();
-
-    unsafe { descriotor_heap.GetCPUDescriptorHandleForHeapStart(&mut handle) };
+    let handle = unsafe {
+                    let mut tmp = direct3d12::D3D12_CPU_DESCRIPTOR_HANDLE::default();
+                    descriotor_heap.GetCPUDescriptorHandleForHeapStart(&mut tmp);
+                    tmp
+                };
 
     for i in 0..swapchain_desc.buffer_count {
         unsafe {
@@ -225,8 +227,9 @@ pub fn create_back_buffer(
                 i as u32,
                 &direct3d12::ID3D12Resource::IID,
                 back_buffers[i as usize].set_abi()
-            ).and_some(back_buffers[i as usize].clone());
-        }
+            )
+            .and_some(back_buffers[i as usize].clone());
+        };
 
         unsafe {
             device.CreateRenderTargetView(
@@ -238,7 +241,7 @@ pub fn create_back_buffer(
 
         handle.clone().ptr += unsafe {
             device.GetDescriptorHandleIncrementSize(direct3d12::D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV) as usize
-        }
+        };
     }
 
     back_buffers
@@ -295,7 +298,7 @@ pub fn create_vertex_buffer_resources(
 
     BufferResources {
         buffer_view: buffer_view,
-        buffer_object: buffer.clone()
+        buffer_object: buffer
     }
 }
 
@@ -319,7 +322,7 @@ pub fn create_index_buffer_resources(
 
     BufferResources {
         buffer_view: buffer_view,
-        buffer_object: buffer.clone()
+        buffer_object: buffer
     }
 }
 
@@ -367,8 +370,8 @@ pub fn create_shader_resource(path: &str, p_entrypoint: &str, p_target: &str) ->
             };
             println!("shader compilation error occured : {}", error_str);
 
-            let result: Result<direct3d11::ID3DBlob, Error> = Err(
-                Error::new(
+            let result: Result<direct3d11::ID3DBlob, WinError> = Err(
+                WinError::new(
                     ErrorCode::E_POINTER,
                     "shader compilation error"
                 )
@@ -378,3 +381,72 @@ pub fn create_shader_resource(path: &str, p_entrypoint: &str, p_target: &str) ->
         }
     }
 }
+
+pub fn create_root_signature(device: &direct3d12::ID3D12Device) -> WinResult<direct3d12::ID3D12RootSignature> {
+    let mut root_signature_desc = direct3d12::D3D12_ROOT_SIGNATURE_DESC::default();
+    root_signature_desc.flags = direct3d12::D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+    // create root signature binary
+    let mut root_signature_blob: Option<direct3d11::ID3DBlob> = None;
+
+    let mut error_blob: Option<direct3d11::ID3DBlob> = None;
+
+    unsafe {
+        direct3d12::D3D12SerializeRootSignature(
+            &root_signature_desc,
+            direct3d12::D3D_ROOT_SIGNATURE_VERSION::D3D_ROOT_SIGNATURE_VERSION_1_0,
+            &mut root_signature_blob,
+            &mut error_blob
+        )
+        .and_some(error_blob);
+    };
+
+    let mut root_signature: Option<direct3d12::ID3D12RootSignature> = None;
+
+    unsafe {
+        device.
+            CreateRootSignature(
+                0,
+                root_signature_blob.clone().unwrap().GetBufferPointer(),
+                root_signature_blob.unwrap().GetBufferSize(),
+                &direct3d12::ID3D12RootSignature::IID,
+                root_signature.set_abi()
+            )
+            .and_some(root_signature)
+    }
+}
+
+pub fn create_pipeline_state(device: &direct3d12::ID3D12Device, gr_pipeline: &direct3d12::D3D12_GRAPHICS_PIPELINE_STATE_DESC) -> WinResult<direct3d12::ID3D12PipelineState> {
+    unsafe {
+        let mut pipeline_state: Option<direct3d12::ID3D12PipelineState> = None;
+        device.
+            CreateGraphicsPipelineState(
+                gr_pipeline,
+                &direct3d12::ID3D12PipelineState::IID,
+                pipeline_state.set_abi()
+            )
+            .and_some(pipeline_state)
+    }
+}
+
+pub fn set_viewport(width: i32, height: i32) -> direct3d12::D3D12_VIEWPORT {
+    let mut viewport = direct3d12::D3D12_VIEWPORT::default();
+    viewport.width = width as f32;
+    viewport.height = height as f32;
+    viewport.top_leftx = 0.0;
+    viewport.top_lefty = 0.0;
+    viewport.max_depth = 1.0;
+    viewport.min_depth = 0.0;
+
+    viewport
+}
+
+// pub fn set_scissor_rect(width: i32, height: i32) -> direct3d12::D3D12_RECT {
+//     let mut scissor_rect = direct3d12::D3D12_RECT::default();
+//     scissor_rect.top = 0;
+//     scissor_rect.left = 0;
+//     scissor_rect.right = scissor_rect.left + width;
+//     scissor_rect.bottom = scissor_rect.top + height;
+
+//     scissor_rect
+// }
