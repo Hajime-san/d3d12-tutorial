@@ -247,6 +247,20 @@ pub fn create_back_buffer(
     back_buffers
 }
 
+pub fn create_fence(device: &direct3d12::ID3D12Device, initial_value: i32, flags: direct3d12::D3D12_FENCE_FLAGS) -> WinResult<direct3d12::ID3D12Fence> {
+    unsafe {
+        let mut fence: Option<direct3d12::ID3D12Fence> = None;
+        device.
+        CreateFence(
+            initial_value as u64,
+            flags,
+            &direct3d12::ID3D12Fence::IID,
+            fence.set_abi()
+        )
+        .and_some(fence)
+    }
+}
+
 fn create_buffer_map<T>(device: &direct3d12::ID3D12Device, comitted_resource: &CommittedResource, resource: &Vec<T>) -> WinResult<direct3d12::ID3D12Resource> {
 
     let buffer = unsafe {

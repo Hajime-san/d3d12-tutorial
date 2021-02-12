@@ -3,7 +3,10 @@ use bindings::{
     windows::win32::system_services as system_services,
     windows::win32::dxgi as dxgi,
     windows::win32::direct3d12 as direct3d12,
+    windows::win32::direct3d11 as direct3d11,
+    windows::win32::windows_programming as windows_programming,
     windows::BOOL,
+    windows::Interface,
 };
 
 use std::{
@@ -82,6 +85,8 @@ fn main() {
 
     // bind render target view heap to swap chain buffer
     let back_buffers = d3d::create_back_buffer(&d3d12_device, &mut swapchain, swapchain_desc1, &rtv_heaps, None);
+
+    let fence = d3d::create_fence(&d3d12_device, 0, direct3d12::D3D12_FENCE_FLAGS::D3D12_FENCE_FLAG_NONE).unwrap();
 
      // create vertices
      let vertices = vec![
@@ -240,6 +245,92 @@ fn main() {
 
     while unsafe { windows_and_messaging::GetMessageW(&mut message, windows_and_messaging::HWND(0), 0, 0).into() } {
         unsafe { windows_and_messaging::DispatchMessageW(&mut message); }
+
+        // increment frame
+        current_frame += 1;
+
+        // get back buffer index
+        let back_buffers_index = swapchain.cast::<dxgi::IDXGISwapChain4>().unwrap().GetCurrentBackBufferIndex();
+
+        // create resource barrier
+
+        let mut barrier_desc = direct3d12::D3D12_RESOURCE_BARRIER {
+            r#type : direct3d12::D3D12_RESOURCE_BARRIER_TYPE::D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+            flags : direct3d12::D3D12_RESOURCE_BARRIER_FLAGS::D3D12_RESOURCE_BARRIER_FLAG_NONE,
+            anonymous: unsafe { std::mem::zeroed() },
+        };
+        *{ barrier_desc.transition } =
+            direct3d12::D3D12_RESOURCE_TRANSITION_BARRIER {
+            p_resource : back_buffers[back_buffers_index as usize],
+            subresource : direct3d12::D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+            state_before : direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_PRESENT,
+            state_after : direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_RENDER_TARGET,
+        };
+
+        command_list.ResourceBarrier(1, &barrier_desc);
+
+        command_list.SetPipelineState(&pipeline_state);
+
+        // set render target
+        let rtv_heap_start = unsafe {
+            let mut tmp = direct3d12::D3D12_CPU_DESCRIPTOR_HANDLE::default();
+            rtv_heaps.GetCPUDescriptorHandleForHeapStart(&mut tmp);
+            tmp
+        };
+
+        rtv_heap_start.ptr += (back_buffers_index * d3d12_device.GetDescriptorHandleIncrementSize(direct3d12::D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV)) as usize;
+
+        command_list.OMSetRenderTargets(
+            1,
+            &rtv_heap_start,
+            BOOL(0),
+            std::ptr::null_mut()
+        );
+
+        // clear render target
+        command_list.ClearRenderTargetView(rtv_heap_start, &clear_color as *const _, 0, std::ptr::null_mut());
+
+        // draw call
+        command_list.RSSetViewports(1, &viewport);
+        // command_list.RSSetScissorRects(1, &scissor_rect);
+        command_list.SetComputeRootSignature(&root_signature);
+        command_list.IASetPrimitiveTopology(direct3d11::D3D_PRIMITIVE_TOPOLOGY::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        command_list.IASetVertexBuffers(0, 1, &vertex_buffer.buffer_view);
+        command_list.IASetIndexBuffer(&index_buffer.buffer_view);
+        command_list.DrawInstanced(3, 1, 0, 0);
+
+        // swap barrier state
+        barrier_desc.transition.state_before = direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier_desc.transition.state_after = direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_PRESENT;
+        command_list.ResourceBarrier(1, &barrier_desc);
+
+        // run commands
+        command_list.Close();
+
+        let cmd_list_array = [ command_list.cast::<direct3d12::ID3D12CommandList>() ];
+
+        command_queue.ExecuteCommandLists(1, &cmd_list_array[0]);
+
+        // handle fence
+        command_queue.Signal(fence, current_frame);
+
+        if fence.GetCompletedValue() != current_frame {
+            let event = system_services::CreateEventW(ptr::null_mut(), BOOL(0), BOOL(0), ptr::null_mut());
+
+            fence.SetEventOnCompletion(current_frame, event);
+
+            system_services::WaitForSingleObject(event, system_services::INFINITE);
+
+            windows_programming::CloseHandle(event);
+        }
+
+        command_allocator.Reset();
+
+        command_list.Reset(command_allocator, ptr::null_mut());
+
+
+        // swap buffer
+        swapchain.Present(1, 0);
 
     }
 }
