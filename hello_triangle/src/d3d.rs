@@ -139,7 +139,7 @@ pub fn create_command_list(
     node_mask: u32,
     r#type: direct3d12::D3D12_COMMAND_LIST_TYPE,
     p_command_allocator: &direct3d12::ID3D12CommandAllocator,
-    p_initial_state: &direct3d12::ID3D12PipelineState)
+    p_initial_state: Option<&direct3d12::ID3D12PipelineState>)
      -> WinResult<direct3d12::ID3D12GraphicsCommandList> {
     unsafe {
         let mut command_list: Option<direct3d12::ID3D12GraphicsCommandList> = None;
@@ -148,7 +148,7 @@ pub fn create_command_list(
                 node_mask,
                 r#type,
                 p_command_allocator,
-                p_initial_state,
+                p_initial_state.and(None),
                 &direct3d12::ID3D12GraphicsCommandList::IID,
                 command_list.set_abi()
             )
