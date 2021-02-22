@@ -47,7 +47,7 @@ fn main() {
     let command_queue_desc = direct3d12::D3D12_COMMAND_QUEUE_DESC {
         flags : direct3d12::D3D12_COMMAND_QUEUE_FLAGS::D3D12_COMMAND_QUEUE_FLAG_NONE,
         node_mask : 0,
-        priority : 0,
+        priority : direct3d12::D3D12_COMMAND_QUEUE_PRIORITY::D3D12_COMMAND_QUEUE_PRIORITY_NORMAL.0,
         r#type : direct3d12::D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT,
     };
 
@@ -195,8 +195,7 @@ fn main() {
     let mut render_target_blend_desc = direct3d12::D3D12_RENDER_TARGET_BLEND_DESC::default();
     render_target_blend_desc.blend_enable = BOOL(0);
     render_target_blend_desc.logic_op_enable = BOOL(0);
-    //render_target_blend_desc.render_target_write_mask = direct3d12::D3D12_COLOR_WRITE_ENABLE::D3D12_COLOR_WRITE_ENABLE_ALL;
-    render_target_blend_desc.render_target_write_mask = 4;
+    render_target_blend_desc.render_target_write_mask = direct3d12::D3D12_COLOR_WRITE_ENABLE::D3D12_COLOR_WRITE_ENABLE_ALL.0 as u8;
 
     // gr_pipeline.blend_state.render_target[0] = render_target_blend_desc;
 
@@ -220,7 +219,7 @@ fn main() {
     gr_pipeline.sample_desc.quality = 0;
 
     // create grahphics pipeline state object
-    let pipeline_state = d3d::create_pipeline_state(&d3d12_device, &gr_pipeline).unwrap();
+    // let pipeline_state = d3d::create_pipeline_state(&d3d12_device, &gr_pipeline).unwrap();
 
     // viewport setting
     let viewport = d3d::set_viewport(WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -233,7 +232,7 @@ fn main() {
             0,
             direct3d12::D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT,
             &command_allocator,
-            &pipeline_state
+            None
         ).unwrap();
 
     let mut current_frame = 0;
@@ -250,87 +249,87 @@ fn main() {
         current_frame += 1;
 
         // get back buffer index
-        let back_buffers_index = swapchain.cast::<dxgi::IDXGISwapChain4>().unwrap().GetCurrentBackBufferIndex();
+        // let back_buffers_index = swapchain.cast::<dxgi::IDXGISwapChain4>().unwrap().GetCurrentBackBufferIndex();
 
-        // create resource barrier
+        // // create resource barrier
 
-        let mut barrier_desc = direct3d12::D3D12_RESOURCE_BARRIER {
-            r#type : direct3d12::D3D12_RESOURCE_BARRIER_TYPE::D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-            flags : direct3d12::D3D12_RESOURCE_BARRIER_FLAGS::D3D12_RESOURCE_BARRIER_FLAG_NONE,
-            anonymous: unsafe { std::mem::zeroed() },
-        };
-        *{ barrier_desc.transition } =
-            direct3d12::D3D12_RESOURCE_TRANSITION_BARRIER {
-            p_resource : back_buffers[back_buffers_index as usize],
-            subresource : direct3d12::D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-            state_before : direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_PRESENT,
-            state_after : direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_RENDER_TARGET,
-        };
+        // let mut barrier_desc = direct3d12::D3D12_RESOURCE_BARRIER {
+        //     r#type : direct3d12::D3D12_RESOURCE_BARRIER_TYPE::D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+        //     flags : direct3d12::D3D12_RESOURCE_BARRIER_FLAGS::D3D12_RESOURCE_BARRIER_FLAG_NONE,
+        //     anonymous: unsafe { std::mem::zeroed() },
+        // };
+        // *{ barrier_desc.transition } =
+        //     direct3d12::D3D12_RESOURCE_TRANSITION_BARRIER {
+        //     p_resource : back_buffers[back_buffers_index as usize],
+        //     subresource : direct3d12::D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+        //     state_before : direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_PRESENT,
+        //     state_after : direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_RENDER_TARGET,
+        // };
 
-        command_list.ResourceBarrier(1, &barrier_desc);
+        // command_list.ResourceBarrier(1, &barrier_desc);
 
-        command_list.SetPipelineState(&pipeline_state);
+        // command_list.SetPipelineState(&pipeline_state);
 
-        // set render target
-        let rtv_heap_start = unsafe {
-            let mut tmp = direct3d12::D3D12_CPU_DESCRIPTOR_HANDLE::default();
-            rtv_heaps.GetCPUDescriptorHandleForHeapStart(&mut tmp);
-            tmp
-        };
+        // // set render target
+        // let rtv_heap_start = unsafe {
+        //     let mut tmp = direct3d12::D3D12_CPU_DESCRIPTOR_HANDLE::default();
+        //     rtv_heaps.GetCPUDescriptorHandleForHeapStart(&mut tmp);
+        //     tmp
+        // };
 
-        rtv_heap_start.ptr += (back_buffers_index * d3d12_device.GetDescriptorHandleIncrementSize(direct3d12::D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV)) as usize;
+        // rtv_heap_start.ptr += (back_buffers_index * d3d12_device.GetDescriptorHandleIncrementSize(direct3d12::D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV)) as usize;
 
-        command_list.OMSetRenderTargets(
-            1,
-            &rtv_heap_start,
-            BOOL(0),
-            std::ptr::null_mut()
-        );
+        // command_list.OMSetRenderTargets(
+        //     1,
+        //     &rtv_heap_start,
+        //     BOOL(0),
+        //     std::ptr::null_mut()
+        // );
 
-        // clear render target
-        command_list.ClearRenderTargetView(rtv_heap_start, &clear_color as *const _, 0, std::ptr::null_mut());
+        // // clear render target
+        // command_list.ClearRenderTargetView(rtv_heap_start, &clear_color as *const _, 0, std::ptr::null_mut());
 
-        // draw call
-        command_list.RSSetViewports(1, &viewport);
-        // command_list.RSSetScissorRects(1, &scissor_rect);
-        command_list.SetComputeRootSignature(&root_signature);
-        command_list.IASetPrimitiveTopology(direct3d11::D3D_PRIMITIVE_TOPOLOGY::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        command_list.IASetVertexBuffers(0, 1, &vertex_buffer.buffer_view);
-        command_list.IASetIndexBuffer(&index_buffer.buffer_view);
-        command_list.DrawInstanced(3, 1, 0, 0);
+        // // draw call
+        // command_list.RSSetViewports(1, &viewport);
+        // // command_list.RSSetScissorRects(1, &scissor_rect);
+        // command_list.SetComputeRootSignature(&root_signature);
+        // command_list.IASetPrimitiveTopology(direct3d11::D3D_PRIMITIVE_TOPOLOGY::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        // command_list.IASetVertexBuffers(0, 1, &vertex_buffer.buffer_view);
+        // command_list.IASetIndexBuffer(&index_buffer.buffer_view);
+        // command_list.DrawInstanced(3, 1, 0, 0);
 
-        // swap barrier state
-        barrier_desc.transition.state_before = direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier_desc.transition.state_after = direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_PRESENT;
-        command_list.ResourceBarrier(1, &barrier_desc);
+        // // swap barrier state
+        // barrier_desc.transition.state_before = direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_RENDER_TARGET;
+        // barrier_desc.transition.state_after = direct3d12::D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_PRESENT;
+        // command_list.ResourceBarrier(1, &barrier_desc);
 
-        // run commands
-        command_list.Close();
+        // // run commands
+        // command_list.Close();
 
-        let cmd_list_array = [ command_list.cast::<direct3d12::ID3D12CommandList>() ];
+        // let cmd_list_array = [ command_list.cast::<direct3d12::ID3D12CommandList>() ];
 
-        command_queue.ExecuteCommandLists(1, &cmd_list_array[0]);
+        // command_queue.ExecuteCommandLists(1, &cmd_list_array[0]);
 
-        // handle fence
-        command_queue.Signal(fence, current_frame);
+        // // handle fence
+        // command_queue.Signal(fence, current_frame);
 
-        if fence.GetCompletedValue() != current_frame {
-            let event = system_services::CreateEventW(ptr::null_mut(), BOOL(0), BOOL(0), ptr::null_mut());
+        // if fence.GetCompletedValue() != current_frame {
+        //     let event = system_services::CreateEventW(ptr::null_mut(), BOOL(0), BOOL(0), ptr::null_mut());
 
-            fence.SetEventOnCompletion(current_frame, event);
+        //     fence.SetEventOnCompletion(current_frame, event);
 
-            system_services::WaitForSingleObject(event, system_services::INFINITE);
+        //     system_services::WaitForSingleObject(event, system_services::INFINITE);
 
-            windows_programming::CloseHandle(event);
-        }
+        //     windows_programming::CloseHandle(event);
+        // }
 
-        command_allocator.Reset();
+        // command_allocator.Reset();
 
-        command_list.Reset(command_allocator, ptr::null_mut());
+        // command_list.Reset(command_allocator, ptr::null_mut());
 
 
-        // swap buffer
-        swapchain.Present(1, 0);
+        // // swap buffer
+        // swapchain.Present(1, 0);
 
     }
 }
